@@ -62,40 +62,79 @@ app.post('/api/analyze-plant', async (req: Request, res: Response) => {
     }
 
     const promptText = `
-You are a senior agricultural plant pathologist and crop expert specializing in Indian/Gujarat agriculture.
-Analyze the provided plant photo(s). ${cropHint ? `The user indicated the crop may be: "${cropHint}".` : ''}
+You are an expert plant pathologist, botanist, and agricultural AI specialist.
+Your task is to analyze the provided image(s) with high accuracy and strictly identify WHAT IS ACTUALLY IN THE SCANNED PHOTO.
+
+CRITICAL INSTRUCTIONS:
+1. STRICT ACCURACY TO SCANNED IMAGE:
+   - Identify the EXACT plant, crop, tree, fruit, vegetable, flower, medicinal plant, or leaf present in the photo.
+   - For example:
+     * If the photo shows a Rose (ગુલાબ), identify it as Rose.
+     * If it shows Lemon / Citrus (લીંબુ), identify it as Lemon.
+     * If it shows Mango (આંબો/કેરી), Guava (જામફળ), Papaya (પપૈયા), Banana (કેળા), Chikoo (ચીકુ) — identify that exact fruit tree.
+     * If it shows Tomato (ટામેટા), Chilli (મરચાં), Brinjal (રીંગણ), Okra (ભીંડા), Onion (ડુંગળી), Garlic (લસણ) — identify that exact vegetable.
+     * If it shows Cotton (કપાસ), Groundnut (મગફળી), Wheat (ઘઉં), Rice/Paddy (ડાંગર), Millet (બાજરી), Maize (મકાઈ), Cumin (જીરું), Mustard (રાયડો), Castor (એરંડા) — identify that exact crop.
+     * If it shows Neem (લીમડો), Tulsi (તુલસી), Banyan (વડ), Peepal (પીપળો), Aloe vera (કુંવારપાઠું) — identify that exact plant.
+     * If it shows a houseplant, ornamental flower, or weed — identify that exact plant.
+   - ${cropHint ? `Note: The user provided an optional note: "${cropHint}". Cross-check with visual evidence. If the photo visibly shows a DIFFERENT plant than the note, identify what is ACTUALLY in the photo!` : 'Identify the plant strictly based on visual characteristics in the photo.'}
+   - NEVER default to cotton, wheat, or any other crop if the photo shows a different plant!
+
+2. NON-PLANT DETECTION:
+   - If the image DOES NOT contain any plant, leaf, crop, flower, tree, or agricultural subject (e.g. photo of a human face, vehicle, animal, indoor furniture, room, blank surface, device, paper, etc.):
+     * Set "is_plant": false
+     * Set "plant_name_gu": "કોઈ છોડ કે પાક ઓળખાયો નથી"
+     * Set "plant_name_en": "Not a Plant / Crop"
+     * Set "scientific_name": "N/A"
+     * Set "crop_category": "અન્ય"
+     * Set "growth_stage": "લાગુ પડતું નથી"
+     * Set "health_status": "attention"
+     * Set "confidence": "high"
+     * Set "confidence_score": 0.95
+     * Set "visible_symptoms": ["આ ફોટામાં કોઈ ખેતી પાક, છોડ, ફૂલ કે પાંદડું દેખાતું નથી."]
+     * Set "possible_disease": "કોઈ રોગ નથી (છોડની ગેરહાજરી)"
+     * Set "possible_pest": "લાગુ પડતું નથી"
+     * Set "possible_nutrient_deficiency": "લાગુ પડતું નથી"
+     * Set "water_guidance": "કૃપા કરીને ખેતરના પાક અથવા ઘરના છોડનો ફોટો સ્કેન કરો."
+     * Set "care_recommendation": "યોગ્ય પરિણામ માટે છોડ અથવા પાંદડાનો સ્પષ્ટ ફોટો લો."
+     * Set "treatment_guidance": "છોડ કે પાંદડાનો ફોટો અપલોડ કરવાથી ચોક્કસ રોગ અને સારવાર મળી શકશે."
+     * Set "warning": "આ ફોટામાં કોઈ પાક કે છોડ દેખાતો નથી. કૃપા કરીને પાક કે છોડનો ફોટો સ્કેનરમાં મૂકો."
+
+3. FOR VALID PLANTS - ACTUAL HEALTH STATUS:
+   - Closely inspect the scanned plant's leaves/stem/fruit.
+   - If the plant is green, spotless, and thriving:
+     * Set "health_status": "healthy"
+     * Set "possible_disease": "છોડ સ્વસ્થ અને તંદુરસ્ત જણાય છે (Healthy Plant)"
+     * Set "visible_symptoms": ["લીલાં અને સ્વસ્થ પાન", "કોઈ સડો કે ડાઘ નથી"]
+   - If diseased or infested, identify the EXACT issue (powdery mildew, leaf spot, aphids, mites, blight, deficiency, etc.) matching THIS specific plant species.
+   - All remedies, organic IPM advice, and watering tips must be specific to THIS plant.
 
 You MUST return a pure, valid JSON object (no markdown quotes, no explanations outside JSON) with this exact schema:
 {
-  "plant_name_gu": "પાકનું ગુજરાતી નામ (e.g. કપાસ, મગફળી, ઘઉં, ટામેટા)",
-  "plant_name_en": "English Name (e.g. Cotton, Groundnut)",
-  "scientific_name": "Botanical / Scientific Name (e.g. Gossypium hirsutum)",
-  "crop_category": "પાકનો પ્રકાર (e.g. રોકડિયો પાક, તેલીબિયાં, અનાજ, શાકભાજી, ઔષધીય છોડ)",
-  "growth_stage": "વૃદ્ધિનો તબક્કો (e.g. વાનસ્પતિક, ફૂલ આવવા, ફળ/ઝીંડવા, પરિપક્વ)",
+  "is_plant": true,
+  "plant_name_gu": "ચોક્કસ છોડ/પાકનું શુદ્ધ ગુજરાતી નામ",
+  "plant_name_en": "Exact English Name",
+  "scientific_name": "Botanical / Scientific Name",
+  "crop_category": "પાક/છોડનો પ્રકાર (બાગાયતી ફળઝાડ, શાકભાજી, અનાજ, તેલીબિયાં, રોકડિયો પાક, સુશોભન ફૂલછોડ, ઔષધીય વનસ્પતિ)",
+  "growth_stage": "વૃદ્ધિનો તબક્કો",
   "health_status": "healthy" | "attention" | "critical",
   "confidence": "high" | "medium" | "low",
-  "confidence_score": 0.85,
-  "visible_symptoms": ["પાન પીળા પડવા", "ગોળાકાર ટપકાં", "કુકડાવો"],
-  "possible_disease": "સંભવિત રોગનું નામ અને ટૂંકી વિગત",
-  "possible_pest": "સંભવિત જીવાત (સફેદ માખી, થ્રીપ્સ, ઈયળ વગેરે) અથવા 'કોઈ જીવાત દેખાતી નથી'",
-  "possible_nutrient_deficiency": "સંભવિત પોષક તત્વોની ઉણપ (નાઇટ્રોજન, પોટાશ, મેગ્નેશિયમ, ઝીંક વગેરે)",
-  "water_guidance": "પાણી/સિંચાઈ માર્ગદર્શન. ક્યારેય 'આજે જ પાણી આપો' જેવી અતિશય નિશ્ચિત ખાતરી ન આપવી; જમીનની ભેજ ચકાસવાની સલાહ આપવી.",
-  "care_recommendation": "સામાન્ય સંભાળ, નીંદણ દૂર કરવું, સૂર્યપ્રકાશ અને હવા-ઉજાસ.",
-  "treatment_guidance": "સૌપ્રથમ Integrated Pest Management (IPM), લીમડાનું તેલ, ટ્રેપ્સ, જૈવિક ઉપાયો બતાવો. કોઈ દવાનું ચોક્કસ મિલી/ગ્રામ માપ માત્ર ફોટા પરથી ન આપવું; માન્ય લેબલ અને કૃષિ વિભાગની ભલામણ ચકાસવાની સૂચના આપવી. PPE (માસ્ક, મોજાં) સલામતી આપવી.",
+  "confidence_score": 0.90,
+  "visible_symptoms": ["ફોટામાં દેખાતા ચોક્કસ લક્ષણો"],
+  "possible_disease": "આ ચોક્કસ છોડનો સંભવિત રોગ અથવા 'છોડ તંદુરસ્ત છે'",
+  "possible_pest": "સંભવિત જીવાત અથવા 'કોઈ જીવાત દેખાતી નથી'",
+  "possible_nutrient_deficiency": "સંભવિત પોષક તત્વોની ઉણપ અથવા 'સામાન્ય પોષણ'",
+  "water_guidance": "આ ચોક્કસ છોડ માટે પાણી/ભેજ માર્ગદર્શન",
+  "care_recommendation": "આ ચોક્કસ છોડ માટે જરૂરી સંભાળ",
+  "treatment_guidance": "આ ચોક્કસ છોડ માટે IPM, લીમડાનું અર્ક, જૈવિક ઉપાયો અને યોગ્ય માવજત",
   "dos_and_donts": {
-    "dos": ["સવારે કે સાંજે શાંત વાતાવરણમાં છંટકાવ કરવો", "પીળા/વાદળી ટ્રેપ વાપરવા"],
-    "donts": ["બે કે વધુ દવાઓ ભેગી ન કરવી", "તડકામાં છંટકાવ ન કરવો", "બાળકોથી દવાઓ દૂર રાખવી"]
+    "dos": ["આ છોડ માટે શું કરવું"],
+    "donts": ["આ છોડ માટે શું ન કરવું"]
   },
-  "when_to_consult_expert": "જો 3 દિવસમાં રોગ 15% થી વધુ વધે તો સ્થાનિક કૃષિ વિજ્ઞાન કેન્દ્ર (KVK) અથવા ગ્રામસેવકનો સંપર્ક કરવો.",
+  "when_to_consult_expert": "ક્યારે નિષ્ણાતની સલાહ લેવી",
   "warning": "આ ફોટા આધારિત પ્રાથમિક AI વિશ્લેષણ છે. ચોક્કસ રોગ, પોષક તત્વોની ઉણપ અથવા દવાની ભલામણ માટે જમીન/પાકની તપાસ અને સ્થાનિક કૃષિ નિષ્ણાતની સલાહ જરૂરી હોઈ શકે છે."
-}
-
-Rules:
-- Respond in high quality, natural, farmer-friendly Gujarati for all descriptions.
-- Strictly adhere to uncertainty rules: Never claim 100% certainty from a single photo.
-- Never recommend dangerous pesticide tank cocktails or exact hazardous chemical dosages.
-`;
-
+};
+`
+;
     const contents = [
       ...imageParts,
       { text: promptText }

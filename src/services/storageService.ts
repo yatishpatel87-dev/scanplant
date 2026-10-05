@@ -26,16 +26,55 @@ export const storageService = {
     try {
       const scans = this.getScans();
       const existingIndex = scans.findIndex(s => s.id === scan.id);
+      
+      // Store a quota-friendly version of the scan
+      const safeScan: PlantDiagnosisResult = {
+        ...scan,
+        // Drop heavy secondary image in persistent storage if it exists
+        secondary_image_url: undefined
+      };
+
       if (existingIndex >= 0) {
-        scans[existingIndex] = scan;
+        scans[existingIndex] = safeScan;
       } else {
-        scans.unshift(scan);
+        scans.unshift(safeScan);
       }
-      // Store up to 50 most recent scans
-      const trimmed = scans.slice(0, 50);
-      localStorage.setItem(SCANS_STORAGE_KEY, JSON.stringify(trimmed));
+
+      // Progressively save with automatic quota recovery
+      let limit = Math.min(scans.length, 12);
+      let saved = false;
+
+      while (limit > 0 && !saved) {
+        try {
+          const subset = scans.slice(0, limit);
+          localStorage.setItem(SCANS_STORAGE_KEY, JSON.stringify(subset));
+          saved = true;
+        } catch (e: any) {
+          // If quota exceeded, halve the items or strip base64
+          if (limit > 3) {
+            limit = Math.floor(limit / 2);
+          } else if (limit > 1) {
+            limit = 1;
+          } else {
+            // Strip large base64 data URLs to guarantee metadata preservation
+            try {
+              const stripped = scans.slice(0, 3).map(s => ({
+                ...s,
+                image_url: s.image_url?.startsWith('data:') ? '' : s.image_url
+              }));
+              localStorage.setItem(SCANS_STORAGE_KEY, JSON.stringify(stripped));
+              saved = true;
+            } catch {
+              // Reset key if browser storage is critically full
+              localStorage.removeItem(SCANS_STORAGE_KEY);
+              saved = true;
+            }
+            break;
+          }
+        }
+      }
     } catch (err) {
-      console.error('Error saving scan to local storage', err);
+      console.warn('Could not save scan to localStorage safely:', err);
     }
   },
 

@@ -107,6 +107,29 @@ export const ReportCard: React.FC<ReportCardProps> = ({
         </div>
       </div>
 
+      {/* Non-plant warning notice if the uploaded photo is not a plant */}
+      {report.is_plant === false && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-3xl p-5 mb-5 shadow-sm text-center animate-fade-in">
+          <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-700">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h3 className="text-base sm:text-lg font-bold text-amber-950 mb-1">
+            આ ફોટામાં કોઈ પાક કે છોડ ઓળખાયો નથી
+          </h3>
+          <p className="text-xs sm:text-sm text-amber-900/80 max-w-md mx-auto mb-4 leading-relaxed">
+            સ્કેન કરેલા ફોટામાં કોઈ પાક, છોડ, ફૂલ અથવા પાંદડું જણાયું નથી. અમારું AI મોડેલ સ્કેનરમાં મૂકેલા ચોક્કસ છોડ કે પાંદડાનું જ સાચું નિદાન કરે છે.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button
+              onClick={onBackToScan}
+              className="px-4 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs shadow-md transition-colors"
+            >
+              📸 પાક કે છોડનો સ્પષ્ટ ફોટો ફરી સ્કેન કરો
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Hero Diagnostic Card */}
       <div className="bg-white rounded-3xl shadow-sm border border-emerald-100 overflow-hidden mb-5">
         <div className="sm:flex">

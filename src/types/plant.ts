@@ -30,6 +30,8 @@ export interface PlantDiagnosisResult {
   when_to_consult_expert: string;
   warning: string;
   is_demo?: boolean;
+  is_plant?: boolean;
+  plant_identification_notes?: string;
 }
 
 export interface GujaratDistrict {

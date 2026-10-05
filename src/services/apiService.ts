@@ -12,29 +12,15 @@ export const apiService = {
       });
 
       if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `સર્વર પ્રતિસાદ ક્ષતિ: ${response.status}`);
       }
 
       const data = await response.json();
       return data;
-    } catch (error) {
-      console.warn('API call failed or offline mode active, using fallback diagnosis:', error);
-
-      // Intelligent fallback: check if hint matches any sample crop
-      const matched = cropHint
-        ? SAMPLE_CASES.find(c => c.plant_name_gu.toLowerCase().includes(cropHint.toLowerCase()) || c.plant_name_en.toLowerCase().includes(cropHint.toLowerCase()))
-        : null;
-
-      const base = matched || SAMPLE_CASES[0];
-      return {
-        ...base,
-        id: `scan-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        image_url: images[0] || base.image_url,
-        secondary_image_url: images[1] || undefined,
-        is_demo: false,
-        warning: 'આ ફોટા આધારિત પ્રાથમિક AI વિશ્લેષણ છે. ચોક્કસ રોગ, પોષક તત્વોની ઉણપ અથવા દવાની ભલામણ માટે જમીન/પાકની તપાસ અને સ્થાનિક કૃષિ નિષ્ણાતની સલાહ જરૂરી હોઈ શકે છે.'
-      };
+    } catch (error: any) {
+      console.error('Plant analysis failed:', error);
+      throw new Error(error.message || 'AI સ્કેનરમાં ફોટાનું વિશ્લેષણ કરવામાં ક્ષતિ આવી. કૃપા કરીને સ્પષ્ટ ફોટો ફરી સ્કેન કરો.');
     }
   },
 

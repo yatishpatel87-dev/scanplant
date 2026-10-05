@@ -148,6 +148,11 @@ export default function App() {
     setActiveTab('chat');
   };
 
+  const handleOpenScanner = () => {
+    setSelectedReport(null);
+    setActiveTab('scan');
+  };
+
   return (
     <div className="min-h-screen bg-[#f8faf9] flex flex-col font-sans text-slate-800 selection:bg-emerald-200">
       {/* Top Header */}
@@ -179,7 +184,7 @@ export default function App() {
           /* Detailed Diagnosis Report Card */
           <ReportCard
             report={selectedReport}
-            onBackToScan={() => setSelectedReport(null)}
+            onBackToScan={handleOpenScanner}
             onAskChatAboutPlant={handleAskChatAboutPlant}
           />
         ) : (
@@ -187,7 +192,7 @@ export default function App() {
           <>
             {activeTab === 'home' && (
               <HomeView
-                onStartScan={() => setActiveTab('scan')}
+                onStartScan={handleOpenScanner}
                 onOpenWeather={() => setActiveTab('weather')}
                 onOpenChat={() => setActiveTab('chat')}
                 onOpenSamples={() => setActiveTab('samples')}
@@ -240,7 +245,7 @@ export default function App() {
                 scans={scans}
                 onSelectScan={(s) => setSelectedReport(s)}
                 onDeleteScan={handleDeleteScan}
-                onStartNewScan={() => setActiveTab('scan')}
+                onStartNewScan={handleOpenScanner}
               />
             )}
 

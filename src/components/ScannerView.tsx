@@ -4,6 +4,8 @@ import { PlantDiagnosisResult } from '../types/plant';
 import { SAMPLE_CASES } from '../data/sampleCases';
 import { apiService } from '../services/apiService';
 
+import { compressImageFile } from '../utils/imageUtils';
+
 interface ScannerViewProps {
   onScanComplete: (result: PlantDiagnosisResult) => void;
   onOpenScanGuide: () => void;
@@ -23,80 +25,45 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
   const [scanStepText, setScanStepText] = useState<string>('તૈયાર');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Camera stream states
-  const [isLiveCameraOpen, setIsLiveCameraOpen] = useState<boolean>(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-
-  // Hidden file inputs
+  // Hidden native file inputs (synchronously triggered for 100% reliable camera opening)
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Stop camera on unmount
-  useEffect(() => {
-    return () => {
-      stopLiveCamera();
-    };
-  }, []);
-
-  const startLiveCamera = async () => {
-    try {
-      setErrorMsg(null);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      });
-      mediaStreamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      setIsLiveCameraOpen(true);
-    } catch (err) {
-      console.warn('Direct live camera stream failed, falling back to standard file capture:', err);
-      // Fallback to standard input capture
-      if (cameraInputRef.current) {
-        cameraInputRef.current.click();
-      }
+  // Direct synchronous camera trigger (guaranteed to open camera in all iframes and mobile browsers)
+  const openDeviceCamera = () => {
+    setErrorMsg(null);
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
     }
   };
 
-  const stopLiveCamera = () => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
+  const openGallery = () => {
+    setErrorMsg(null);
+    if (galleryInputRef.current) {
+      galleryInputRef.current.click();
     }
-    setIsLiveCameraOpen(false);
   };
 
-  const captureFromLiveVideo = () => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      assignImage(dataUrl);
-    }
-    stopLiveCamera();
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setErrorMsg(null);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        assignImage(dataUrl);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Auto-compress large phone photos to crisp diagnostic resolution (~150KB)
+      const compressedDataUrl = await compressImageFile(file, 1280, 0.85);
+      assignImage(compressedDataUrl);
+    } catch {
+      // Fallback to FileReader if canvas compression has any issue
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (dataUrl) {
+          assignImage(dataUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
     e.target.value = '';
   };
 
@@ -176,49 +143,7 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
         </p>
       </div>
 
-      {/* Live Camera Stream Modal */}
-      {isLiveCameraOpen && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between p-4">
-          <div className="flex items-center justify-between text-white">
-            <span className="text-sm font-semibold">કેમેરા ફોકસ કરો</span>
-            <button
-              onClick={stopLiveCamera}
-              className="p-2 rounded-full bg-white/20 text-white hover:bg-white/30"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="relative flex-1 flex items-center justify-center overflow-hidden my-4 rounded-2xl bg-black">
-            <video
-              ref={videoRef}
-              playsInline
-              autoPlay
-              muted
-              className="w-full h-full object-cover"
-            />
-            {/* Guide overlay reticle */}
-            <div className="absolute inset-8 border-2 border-emerald-400/60 rounded-2xl pointer-events-none flex items-center justify-center">
-              <span className="bg-black/40 text-emerald-200 text-xs px-3 py-1 rounded-full backdrop-blur-sm">
-                પાનને બોક્સની વચ્ચે રાખો
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-center pb-6">
-            <button
-              onClick={captureFromLiveVideo}
-              className="w-18 h-18 rounded-full border-4 border-white bg-emerald-600 active:scale-95 shadow-2xl flex items-center justify-center"
-            >
-              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center">
-                <Camera className="w-6 h-6 text-emerald-700" />
-              </div>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Hidden native input files */}
+      {/* Hidden native input files for 100% reliable capture on all devices */}
       <input
         ref={galleryInputRef}
         type="file"
@@ -264,7 +189,16 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
         </div>
 
         {/* Viewport & Scanner Simulation */}
-        <div className="relative aspect-[4/3] bg-emerald-950/90 flex items-center justify-center overflow-hidden">
+        <div 
+          onClick={() => {
+            if (!(activeSlot === 'primary' ? primaryImage : secondaryImage) && !isScanning) {
+              openDeviceCamera();
+            }
+          }}
+          className={`relative aspect-[4/3] bg-emerald-950/90 flex items-center justify-center overflow-hidden ${
+            !(activeSlot === 'primary' ? primaryImage : secondaryImage) ? 'cursor-pointer group hover:bg-emerald-900/90 transition-colors' : ''
+          }`}
+        >
           {/* Active Image Display */}
           {(activeSlot === 'primary' ? primaryImage : secondaryImage) ? (
             <div className="relative w-full h-full">
@@ -290,7 +224,10 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
               {/* Remove button */}
               {!isScanning && (
                 <button
-                  onClick={() => removeImage(activeSlot)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeImage(activeSlot);
+                  }}
                   className="absolute top-3 right-3 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-sm transition-colors"
                   title="ફોટો હટાવો"
                 >
@@ -299,19 +236,22 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
               )}
             </div>
           ) : (
-            /* Empty State / Photo Capture Placeholder */
-            <div className="text-center p-6 text-white max-w-sm">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-800/60 border border-emerald-500/40 flex items-center justify-center text-emerald-300 mb-3 shadow-inner">
+            /* Empty State / Photo Capture Placeholder - Clickable! */
+            <div className="text-center p-6 text-white max-w-sm select-none">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-800/60 border border-emerald-500/40 flex items-center justify-center text-emerald-300 mb-3 shadow-inner group-hover:scale-105 group-hover:bg-emerald-700/70 transition-all">
                 <Camera className="w-8 h-8" />
               </div>
-              <h3 className="text-sm sm:text-base font-semibold text-emerald-100">
+              <h3 className="text-sm sm:text-base font-semibold text-emerald-100 group-hover:text-white transition-colors">
                 {activeSlot === 'primary'
-                  ? 'પાન અથવા રોગગ્રસ્ત ભાગનો ફોટો લો'
-                  : 'આખા છોડનો અથવા પાન પાછળનો ફોટો લો'}
+                  ? 'અહીં ટચ કરી પાનનો ફોટો લો'
+                  : 'અહીં ટચ કરી આખા છોડનો ફોટો લો'}
               </h3>
               <p className="text-xs text-emerald-300/80 mt-1">
-                ચોક્કસ રોગ ઓળખ માટે સારો પ્રકાશ અને સ્પષ્ટ ફોકસ રાખો
+                કેમેરાથી તાજો ફોટો પાડો અથવા નીચેથી ગેલેરીમાંથી પસંદ કરો
               </p>
+              <span className="inline-block mt-3 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-[11px] font-medium">
+                📸 કેમેરા ચાલુ કરવા ટચ કરો
+              </span>
             </div>
           )}
         </div>
@@ -320,18 +260,20 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
         <div className="p-3 sm:p-4 bg-white border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
-              onClick={startLiveCamera}
+              type="button"
+              onClick={openDeviceCamera}
               disabled={isScanning}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold transition-colors disabled:opacity-50 shadow-sm"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 active:scale-95 text-white text-xs font-semibold transition-all disabled:opacity-50 shadow-sm cursor-pointer"
             >
               <Camera className="w-4 h-4 text-emerald-300" />
-              <span>કેમેરાથી લો</span>
+              <span>કેમેરાથી ફોટો લો</span>
             </button>
 
             <button
-              onClick={() => galleryInputRef.current?.click()}
+              type="button"
+              onClick={openGallery}
               disabled={isScanning}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer border border-slate-200"
             >
               <Upload className="w-4 h-4 text-slate-600" />
               <span>ગેલેરીમાંથી પસંદ કરો</span>
@@ -339,6 +281,7 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onOpenScanGuide}
             className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-semibold py-1 px-2"
           >
@@ -348,17 +291,22 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
         </div>
       </div>
 
-      {/* Optional Crop Hint Field */}
+      {/* Optional Crop/Plant Hint Field */}
       <div className="bg-white rounded-xl p-3.5 shadow-sm border border-emerald-100 mb-4">
-        <label className="block text-xs font-semibold text-slate-700 mb-1">
-          🌾 પાકનું નામ (જો ખબર હોય તો લખો – વૈકલ્પિક):
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-xs font-semibold text-slate-700">
+            🌿 પાક કે છોડનું નામ (વૈકલ્પિક - જો ખબર હોય તો જ લખો):
+          </label>
+          <span className="text-[10px] text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            જે ફોટો સ્કેન થશે તેની જ માહિતી મળશે
+          </span>
+        </div>
         <div className="flex gap-2">
           <input
             type="text"
             value={cropHint}
             onChange={(e) => setCropHint(e.target.value)}
-            placeholder="ઉદા. કપાસ, મગફળી, ઘઉં, ડુંગળી, ટામેટા..."
+            placeholder="દા.ત. ગુલાબ, લીંબુ, આંબો, ટામેટા, મરચાં, કપાસ, ઘઉં (ખાલી પણ રાખી શકાય)"
             disabled={isScanning}
             className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
           />
@@ -371,6 +319,10 @@ export const ScannerView: React.FC<ScannerViewProps> = ({
             </button>
           )}
         </div>
+        <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+          <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
+          <span>ખેતરનો પાક, બગીચાનો છોડ, ફળઝાડ કે શાકભાજી — સ્કેનરમાં મુકેલા ફોટાનું જ ચોક્કસ વિશ્લેષણ થશે.</span>
+        </p>
       </div>
 
       {/* Error Alert */}
